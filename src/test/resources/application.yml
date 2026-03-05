@@ -1,0 +1,13 @@
+sftp:
+  enabled: false
+  polling-interval: 5s
+  users:
+    - id: testuser1
+      host: localhost
+      port: 2222
+      username: testuser
+      password: testpass
+      home-dir: "test/"
+      input-dir: "input"
+      output-dir: "output"
+      allow-unknown-keys: true

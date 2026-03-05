@@ -1,0 +1,35 @@
+spring:
+  application:
+    name: sftp-poc
+  main:
+    web-application-type: none
+
+# ─── SFTP multi-user configuration ───────────────────────────────────────────
+sftp:
+  polling-interval: 30s
+  users:
+    - id: user1
+      host: sftp.example.com
+      port: 22
+      username: user1
+      private-key-path: classpath:keys/user1_id_rsa
+      # private-key-passphrase: optional-passphrase
+      home-dir: "16000002/"
+      input-dir: "input"
+      output-dir: "output"
+      allow-unknown-keys: true
+
+    - id: user2
+      host: sftp2.example.com
+      port: 22
+      username: user2
+      password: secret-password
+      home-dir: "16000003/"
+      input-dir: "input"
+      output-dir: "output"
+      allow-unknown-keys: true
+
+logging:
+  level:
+    dev.effective.sftppoc: DEBUG
+    org.springframework.integration: INFO
