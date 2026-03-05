@@ -54,17 +54,16 @@ public class SftpInboundFlowConfig {
      * based on the current thread key (set by RotatingServerAdvice).
      */
     @Bean
-    public DelegatingSessionFactory<SftpClient.DirEntry> delegatingSessionFactory() {
+    public DelegatingSessionFactory<SftpClient.DirEntry> sftpDelegatingSessionFactory() {
         Map<String, CachingSessionFactory<SftpClient.DirEntry>> allFactories =
                 sessionFactoryProvider.getAllSessionFactories();
 
-        // DefaultSessionFactoryLocator expects Map<Object, SessionFactory<F>>
         Map<Object, SessionFactory<SftpClient.DirEntry>> factoryMap = new LinkedHashMap<>(allFactories);
 
-        // Use the first user's factory as default
-        SessionFactory<SftpClient.DirEntry> defaultFactory = properties.users().isEmpty()
+        List<UserConfig> sftpUsers = properties.usersForProtocol(SftpProperties.Protocol.SFTP);
+        SessionFactory<SftpClient.DirEntry> defaultFactory = sftpUsers.isEmpty()
                 ? null
-                : allFactories.get(properties.users().getFirst().id());
+                : allFactories.get(sftpUsers.getFirst().id());
 
         DefaultSessionFactoryLocator<SftpClient.DirEntry> locator =
                 new DefaultSessionFactoryLocator<>(factoryMap, defaultFactory);
@@ -77,16 +76,16 @@ public class SftpInboundFlowConfig {
      * on each poll cycle.
      */
     @Bean
-    public RotatingServerAdvice rotatingServerAdvice() {
+    public RotatingServerAdvice sftpRotatingServerAdvice() {
         List<RotationPolicy.KeyDirectory> keyDirectories = new ArrayList<>();
 
-        for (UserConfig user : properties.users()) {
+        for (UserConfig user : properties.usersForProtocol(SftpProperties.Protocol.SFTP)) {
             String remoteInputPath = user.remoteInputPath();
             keyDirectories.add(new RotationPolicy.KeyDirectory(user.id(), remoteInputPath));
-            log.info("Registered rotation entry: user='{}', remoteDir='{}'", user.id(), remoteInputPath);
+            log.info("Registered SFTP rotation entry: user='{}', remoteDir='{}'", user.id(), remoteInputPath);
         }
 
-        return new RotatingServerAdvice(delegatingSessionFactory(), keyDirectories, true);
+        return new RotatingServerAdvice(sftpDelegatingSessionFactory(), keyDirectories, true);
     }
 
     /**
@@ -99,7 +98,7 @@ public class SftpInboundFlowConfig {
     @Bean
     public IntegrationFlow sftpInboundFlow() {
         return IntegrationFlow
-                .from(Sftp.inboundAdapter(delegatingSessionFactory())
+                .from(Sftp.inboundAdapter(sftpDelegatingSessionFactory())
                                 .preserveTimestamp(true)
                                 .remoteDirectory(".")
                                 .filter(new SftpPersistentAcceptOnceFileListFilter(
@@ -111,7 +110,7 @@ public class SftpInboundFlowConfig {
                         e -> e.id("sftpInboundAdapter")
                                 .autoStartup(properties.enabled())
                                 .poller(Pollers.fixedDelay(properties.pollingInterval())
-                                        .advice(rotatingServerAdvice())))
+                                        .advice(sftpRotatingServerAdvice())))
                 .handle(this::handleDownloadedFile)
                 .get();
     }

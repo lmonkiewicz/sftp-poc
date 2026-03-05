@@ -5,6 +5,7 @@ import dev.effective.sftppoc.config.SftpProperties.UserConfig;
 import org.apache.sshd.sftp.client.SftpClient;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.integration.channel.DirectChannel;
@@ -33,8 +34,9 @@ public class SftpOutboundFlowConfig {
     private final DelegatingSessionFactory<SftpClient.DirEntry> delegatingSessionFactory;
     private final SftpProperties properties;
 
-    public SftpOutboundFlowConfig(DelegatingSessionFactory<SftpClient.DirEntry> delegatingSessionFactory,
-                                   SftpProperties properties) {
+    public SftpOutboundFlowConfig(
+            @Qualifier("sftpDelegatingSessionFactory") DelegatingSessionFactory<SftpClient.DirEntry> delegatingSessionFactory,
+            SftpProperties properties) {
         this.delegatingSessionFactory = delegatingSessionFactory;
         this.properties = properties;
     }

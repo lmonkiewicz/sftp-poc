@@ -2,7 +2,8 @@ sftp:
   enabled: false
   polling-interval: 5s
   users:
-    - id: testuser1
+    - id: testuser-sftp
+      protocol: SFTP
       host: localhost
       port: 2222
       username: testuser
@@ -11,3 +12,14 @@ sftp:
       input-dir: "input"
       output-dir: "output"
       allow-unknown-keys: true
+
+    - id: testuser-ftp
+      protocol: FTP
+      host: localhost
+      port: 2121
+      username: ftptest
+      password: ftppass
+      home-dir: "ftptest/"
+      input-dir: "in"
+      output-dir: "out"
+      passive-mode: true

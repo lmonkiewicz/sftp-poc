@@ -35,15 +35,17 @@ public class SftpSessionFactoryProvider {
 
     public SftpSessionFactoryProvider(SftpProperties properties) {
         this.properties = properties;
-        this.sessionFactories = properties.users().stream()
+        this.sessionFactories = properties.usersForProtocol(SftpProperties.Protocol.SFTP).stream()
                 .collect(Collectors.toMap(
                         UserConfig::id,
                         this::createCachingSessionFactory,
                         (a, b) -> a,
                         LinkedHashMap::new
                 ));
-        log.info("Initialized SFTP session factories for {} users: {}",
-                sessionFactories.size(), sessionFactories.keySet());
+        if (!sessionFactories.isEmpty()) {
+            log.info("Initialized SFTP session factories for {} users: {}",
+                    sessionFactories.size(), sessionFactories.keySet());
+        }
     }
 
     /**
@@ -69,6 +71,10 @@ public class SftpSessionFactoryProvider {
      */
     public SftpProperties getProperties() {
         return properties;
+    }
+
+    public boolean hasUsers() {
+        return !sessionFactories.isEmpty();
     }
 
     private CachingSessionFactory<SftpClient.DirEntry> createCachingSessionFactory(UserConfig user) {

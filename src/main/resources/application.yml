@@ -4,11 +4,13 @@ spring:
   main:
     web-application-type: none
 
-# ─── SFTP multi-user configuration ───────────────────────────────────────────
+# ─── Multi-user file transfer configuration (FTP + SFTP) ────────────────────
 sftp:
   polling-interval: 30s
   users:
+    # ── SFTP users ──
     - id: user1
+      protocol: SFTP
       host: sftp.example.com
       port: 22
       username: user1
@@ -20,6 +22,7 @@ sftp:
       allow-unknown-keys: true
 
     - id: user2
+      protocol: SFTP
       host: sftp2.example.com
       port: 22
       username: user2
@@ -28,6 +31,18 @@ sftp:
       input-dir: "input"
       output-dir: "output"
       allow-unknown-keys: true
+
+    # ── FTP users ──
+    - id: user3
+      protocol: FTP
+      host: ftp.example.com
+      port: 21
+      username: ftpuser
+      password: ftp-password
+      home-dir: "16000004/"
+      input-dir: "input"
+      output-dir: "output"
+      passive-mode: true
 
 logging:
   level:
