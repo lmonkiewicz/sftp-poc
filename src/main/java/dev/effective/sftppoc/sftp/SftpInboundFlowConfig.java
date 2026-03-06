@@ -31,7 +31,10 @@ import java.util.Map;
  * from multiple user servers.
  *
  * <p>Uses {@link DelegatingSessionFactory} with {@link RotatingServerAdvice}
- * to poll each configured user's SFTP server and input directory in rotation.</p>
+ * to poll each configured SFTP user's server in rotation.</p>
+ *
+ * <p>All beans are safe to create even when no SFTP users are configured —
+ * the inbound flow uses a no-op pipeline in that case.</p>
  */
 @Configuration
 public class SftpInboundFlowConfig {
@@ -49,10 +52,6 @@ public class SftpInboundFlowConfig {
         this.properties = properties;
     }
 
-    /**
-     * A DelegatingSessionFactory that selects the session factory at runtime
-     * based on the current thread key (set by RotatingServerAdvice).
-     */
     @Bean
     public DelegatingSessionFactory<SftpClient.DirEntry> sftpDelegatingSessionFactory() {
         Map<String, CachingSessionFactory<SftpClient.DirEntry>> allFactories =
@@ -71,32 +70,25 @@ public class SftpInboundFlowConfig {
         return new DelegatingSessionFactory<>(locator);
     }
 
-    /**
-     * RotatingServerAdvice rotates through all users and their input directories
-     * on each poll cycle.
-     */
     @Bean
-    public RotatingServerAdvice sftpRotatingServerAdvice() {
-        List<RotationPolicy.KeyDirectory> keyDirectories = new ArrayList<>();
+    public IntegrationFlow sftpInboundFlow() {
+        List<UserConfig> sftpUsers = properties.usersForProtocol(SftpProperties.Protocol.SFTP);
 
-        for (UserConfig user : properties.usersForProtocol(SftpProperties.Protocol.SFTP)) {
+        if (sftpUsers.isEmpty()) {
+            log.info("No SFTP users configured — SFTP inbound flow disabled");
+            return f -> f.nullChannel();
+        }
+
+        // Build RotatingServerAdvice inline
+        List<RotationPolicy.KeyDirectory> keyDirectories = new ArrayList<>();
+        for (UserConfig user : sftpUsers) {
             String remoteInputPath = user.remoteInputPath();
             keyDirectories.add(new RotationPolicy.KeyDirectory(user.id(), remoteInputPath));
             log.info("Registered SFTP rotation entry: user='{}', remoteDir='{}'", user.id(), remoteInputPath);
         }
+        RotatingServerAdvice advice = new RotatingServerAdvice(
+                sftpDelegatingSessionFactory(), keyDirectories, true);
 
-        return new RotatingServerAdvice(sftpDelegatingSessionFactory(), keyDirectories, true);
-    }
-
-    /**
-     * Inbound integration flow that downloads files from SFTP servers.
-     *
-     * <p>The RotatingServerAdvice ensures that polling rotates across
-     * all configured user servers and directories. Files are downloaded
-     * to local directory organized by remote directory structure.</p>
-     */
-    @Bean
-    public IntegrationFlow sftpInboundFlow() {
         return IntegrationFlow
                 .from(Sftp.inboundAdapter(sftpDelegatingSessionFactory())
                                 .preserveTimestamp(true)
@@ -110,20 +102,17 @@ public class SftpInboundFlowConfig {
                         e -> e.id("sftpInboundAdapter")
                                 .autoStartup(properties.enabled())
                                 .poller(Pollers.fixedDelay(properties.pollingInterval())
-                                        .advice(sftpRotatingServerAdvice())))
+                                        .advice(advice)))
                 .handle(this::handleDownloadedFile)
                 .get();
     }
 
-    /**
-     * Handles each downloaded file message.
-     */
     private void handleDownloadedFile(Message<?> message) {
         Object payload = message.getPayload();
         if (payload instanceof File file) {
-            log.info("Downloaded file: {} (size: {} bytes)", file.getAbsolutePath(), file.length());
+            log.info("[SFTP] Downloaded file: {} (size: {} bytes)", file.getAbsolutePath(), file.length());
         } else {
-            log.info("Received message: {}", payload);
+            log.info("[SFTP] Received message: {}", payload);
         }
     }
 }

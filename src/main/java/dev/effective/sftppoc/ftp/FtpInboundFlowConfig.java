@@ -5,7 +5,6 @@ import dev.effective.sftppoc.config.SftpProperties.UserConfig;
 import org.apache.commons.net.ftp.FTPFile;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.integration.dsl.IntegrationFlow;
@@ -31,8 +30,8 @@ import java.util.Map;
  * Configures the inbound FTP integration flow for downloading files
  * from multiple user servers using plain FTP protocol.
  *
- * <p>This configuration is only activated when FTP users are present
- * in the configuration.</p>
+ * <p>All beans are safe to create even when no FTP users are configured —
+ * the inbound flow uses a no-op pipeline in that case.</p>
  */
 @Configuration
 public class FtpInboundFlowConfig {
@@ -69,27 +68,23 @@ public class FtpInboundFlowConfig {
     }
 
     @Bean
-    public RotatingServerAdvice ftpRotatingServerAdvice() {
-        List<RotationPolicy.KeyDirectory> keyDirectories = new ArrayList<>();
+    public IntegrationFlow ftpInboundFlow() {
+        List<UserConfig> ftpUsers = properties.usersForProtocol(SftpProperties.Protocol.FTP);
 
-        for (UserConfig user : properties.usersForProtocol(SftpProperties.Protocol.FTP)) {
+        if (ftpUsers.isEmpty()) {
+            log.info("No FTP users configured — FTP inbound flow disabled");
+            return f -> f.nullChannel();
+        }
+
+        // Build RotatingServerAdvice inline
+        List<RotationPolicy.KeyDirectory> keyDirectories = new ArrayList<>();
+        for (UserConfig user : ftpUsers) {
             String remoteInputPath = user.remoteInputPath();
             keyDirectories.add(new RotationPolicy.KeyDirectory(user.id(), remoteInputPath));
             log.info("Registered FTP rotation entry: user='{}', remoteDir='{}'", user.id(), remoteInputPath);
         }
-
-        return new RotatingServerAdvice(ftpDelegatingSessionFactory(), keyDirectories, true);
-    }
-
-    /**
-     * Inbound FTP integration flow. Only created when FTP users are configured.
-     */
-    @Bean
-    public IntegrationFlow ftpInboundFlow() {
-        if (!sessionFactoryProvider.hasUsers()) {
-            // Return a no-op flow when no FTP users are configured
-            return f -> f.nullChannel();
-        }
+        RotatingServerAdvice advice = new RotatingServerAdvice(
+                ftpDelegatingSessionFactory(), keyDirectories, true);
 
         return IntegrationFlow
                 .from(Ftp.inboundAdapter(ftpDelegatingSessionFactory())
@@ -104,7 +99,7 @@ public class FtpInboundFlowConfig {
                         e -> e.id("ftpInboundAdapter")
                                 .autoStartup(properties.enabled())
                                 .poller(Pollers.fixedDelay(properties.pollingInterval())
-                                        .advice(ftpRotatingServerAdvice())))
+                                        .advice(advice)))
                 .handle(this::handleDownloadedFile)
                 .get();
     }
